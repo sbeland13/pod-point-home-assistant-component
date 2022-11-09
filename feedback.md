@@ -22,17 +22,23 @@ Though unlikely that most users would own more than a few of these chargers wher
 On the topic of results pagination, one thing that is missing from the code is for example in [`client.async_get_charges`](https://github.com/mattrayner/podpointclient/blob/c46b0a65436ef16e7b0bd29b71fdf2923f567b58/podpointclient/client.py#L108), we use the pagination feature of the api by setting the default `perpage` param to 5 as well as setting the `page` param to 1, but there is no pagination handler to handle fetching of subsequent pages. This would make it impossible to fetch beyond 5 charge sessions if the kwarg is not overridden with the value `"all"`. I propose something like the following in `podpointclient/client.py : PodPointClient`:
 
 ```python
-async def paginated_get(self, url: str, params: Dict[str, Any], headers: Dict[str, Any]): -> List[Dict[str, Any]]
+async def paginated_get(
+    self,
+    url: str,
+    params: Dict[str, Any],
+    headers: Dict[str, Any],
+    result_key: str
+): -> List[Dict[str, Any]]
     response_results = []
     page = int(params.get(page, "1"))
     new_results = True
 
-    response_results.extend(json.get("results", {}))  # would need to test for the right "results" json key here for diffent endpoints
+    response_results.extend(json.get(result_key, {}))
     next_url = json.get("next_url")
     while new_results:
         response = await self.api_wrapper.get(url=url, params=params, headers=headers)
         json = response.json()
-        new_results = json.get("results", {})
+        new_results = json.get(result_key, {})
         response_results.extend(new_results)
         page += 1
         params["page"] = str(page)
@@ -44,7 +50,7 @@ And then we would call this method directly in [`client.async_get_charges`](http
 -  response = await self.api_wrapper.get(url=url, params=params, headers=headers)
 
 -  json = await response.json()
-+  json = await self.api_wrapper.paginated_get(url=url, params=params, headers=headers)
++  json = await self.api_wrapper.paginated_get(url=url, params=params, headers=headers, result_key="charges")
 
    factory = ChargeFactory()
 -  charges = factory.build_charges(charge_response=json)
